@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparador con Pre-visualización</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f1f5f9; --card: #ffffff; --accent: #059669; --preview: #fff7ed; }
+        body { font-family: system-ui, sans-serif; background-color: var(--bg); margin: 0; padding: 15px; color: #1e293b; }
+        .container { max-width: 500px; margin: 0 auto; }
+        .form-group { background: var(--card); padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #e2e8f0; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        
+        /* Panel de Vista Previa */
+        .preview-box { background: var(--preview); border: 1px solid #ffedd5; padding: 15px; border-radius: 10px; margin-bottom: 15px; display: none; text-align: center; }
+        .preview-price { font-size: 1.5rem; font-weight: 800; color: #c2410c; }
+
+        .iva-control { display: flex; align-items: center; background: #f8fafc; padding: 10px; border-radius: 8px; margin: 5px 0 15px 0; border: 1px dashed #cbd5e1; }
+        .iva-control input { width: auto; margin-right: 10px; transform: scale(1.2); }
+        .iva-control label { font-size: 0.9rem; color: #64748b; font-weight: 500; cursor: pointer; }
+
+        button.main-btn { width: 100%; background: var(--primary); color: white; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .producto-grupo { background: var(--card); border-radius: 15px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .grupo-header { background: #e2e8f0; padding: 10px 15px; font-weight: 800; text-transform: uppercase; font-size: 0.85rem; color: #475569; }
+        .tienda-fila { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid #f1f5f9; }
+        .tienda-fila.mejor-precio { background-color: #f0fdf4; }
+        .precio-tag { font-weight: 700; color: var(--accent); }
+        .delete-btn { border: none; background: none; color: #ef4444; font-size: 1.2rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align:center;">📊 Comparador de Precios</h2>
+    
+    <div class="form-group">
+        <input type="text" id="producto" list="lista-sug-productos" oninput="calcularVistaPrevia()" placeholder="Producto">
+        <datalist id="lista-sug-productos"></datalist>
+
+        <input type="text" id="tienda" list="lista-sug-tiendas" oninput="calcularVistaPrevia()" placeholder="Tienda">
+        <datalist id="lista-sug-tiendas"></datalist>
+
+        <input type="number" id="precio" step="0.01" oninput="calcularVistaPrevia()" placeholder="Precio base">
+        
+        <div class="iva-control">
+            <input type="checkbox" id="aplicarIVA" onchange="calcularVistaPrevia()">
+            <label for="aplicarIVA">El precio NO tiene IVA (+21%)</label>
+        </div>
+
+        <div id="previewBox" class="preview-box">
+            <div style="font-size: 0.8rem; color: #9a3412; margin-bottom: 5px;">PRECIO FINAL ESTIMADO:</div>
+            <div class="preview-price" id="precioFinalTexto">0.00€</div>
+            <div id="detalleIVA" style="font-size: 0.75rem; color: #ea580c;"></div>
+        </div>
+
+        <button class="main-btn" onclick="agregarProducto()">Confirmar y Guardar</button>
+    </div>
+
+    <div id="lista-agrupada"></div>
+</div>
+
+<script>
+    let registros = JSON.parse(localStorage.getItem('mis_precios_v4')) || [];
+    const VALOR_IVA = 1.21;
+
+    function calcularVistaPrevia() {
+        const precioBase = parseFloat(document.getElementById('precio').value);
+        const conIVA = document.getElementById('aplicarIVA').checked;
+        const box = document.getElementById('previewBox');
+        const txtPrecio = document.getElementById('precioFinalTexto');
+        const txtDetalle = document.getElementById('detalleIVA');
+
+        if (!isNaN(precioBase) && precioBase > 0) {
+            box.style.display = 'block';
+            let final = conIVA ? precioBase * VALOR_IVA : precioBase;
+            txtPrecio.innerText = final.toFixed(2) + "€";
+            txtDetalle.innerText = conIVA ? `(Base: ${precioBase.toFixed(2)}€ + 21% IVA)` : "(Ya incluye IVA)";
+            return final;
+        } else {
+            box.style.display = 'none';
+            return null;
+        }
+    }
+
+    function renderizar() {
+        const contenedor = document.getElementById('lista-agrupada');
+        contenedor.innerHTML = '';
+
+        const grupos = registros.reduce((acc, item) => {
+            const nombre = item.nombre.toLowerCase();
+            if (!acc[nombre]) acc[nombre] = [];
+            acc[nombre].push(item);
+            return acc;
+        }, {});
+
+        Object.keys(grupos).sort().forEach(nombreProd => {
+            const tiendas = grupos[nombreProd].sort((a, b) => a.precio - b.precio);
+            let htmlGrupo = `<div class="producto-grupo"><div class="grupo-header">${nombreProd}</div>`;
+            tiendas.forEach((t, i) => {
+                htmlGrupo += `
+                    <div class="tienda-fila ${i === 0 ? 'mejor-precio' : ''}">
+                        <div><span style="text-transform: capitalize;">${t.tienda}</span></div>
+                        <div style="display:flex; align-items:center;">
+                            <span class="precio-tag">${parseFloat(t.precio).toFixed(2)}€</span>
+                            <button class="delete-btn" onclick="eliminar(${t.id})">✕</button>
+                        </div>
+                    </div>`;
+            });
+            contenedor.innerHTML += htmlGrupo + `</div>`;
+        });
+        actualizarSugerencias();
+    }
+
+    function agregarProducto() {
+        const precioFinal = calcularVistaPrevia();
+        const nombre = document.getElementById('producto').value.trim();
+        const tienda = document.getElementById('tienda').value.trim();
+
+        if(nombre && tienda && precioFinal) {
+            registros.push({ id: Date.now(), nombre, tienda, precio: precioFinal });
+            localStorage.setItem('mis_precios_v4', JSON.stringify(registros));
+            renderizar();
+            
+            // Limpiar
+            document.getElementById('producto').value = '';
+            document.getElementById('tienda').value = '';
+            document.getElementById('precio').value = '';
+            document.getElementById('aplicarIVA').checked = false;
+            document.getElementById('previewBox').style.display = 'none';
+        }
+    }
+
+    function actualizarSugerencias() {
+        const uP = [...new Set(registros.map(p => p.nombre))].sort();
+        const uT = [...new Set(registros.map(p => p.tienda))].sort();
+        document.getElementById('lista-sug-productos').innerHTML = uP.map(p => `<option value="${p}">`).join('');
+        document.getElementById('lista-sug-tiendas').innerHTML = uT.map(t => `<option value="${t}">`).join('');
+    }
+
+    function eliminar(id) {
+        if(confirm("¿Eliminar registro?")) {
+            registros = registros.filter(r => r.id !== id);
+            localStorage.setItem('mis_precios_v4', JSON.stringify(registros));
+            renderizar();
+        }
+    }
+
+    renderizar();
+</script>
+</body>
+</html>
